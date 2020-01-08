@@ -25,4 +25,5 @@
         app:layout_constraintEnd_toEndOf="@id/imgFood"
         android:textSize="20sp" />
 
+
 </androidx.constraintlayout.widget.ConstraintLayout>
