@@ -11,6 +11,7 @@
         app:srcCompat="@drawable/french_fries"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        android:src="@drawable/camera_logo"
         />
 
     <TextView
@@ -21,6 +22,7 @@
         android:text="French Fries"
         app:layout_constraintStart_toStartOf="@id/imgFood"
         app:layout_constraintTop_toBottomOf="@id/imgFood"
+        app:layout_constraintEnd_toEndOf="@id/imgFood"
         android:textSize="20sp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

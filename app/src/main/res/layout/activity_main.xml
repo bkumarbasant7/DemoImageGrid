@@ -14,5 +14,14 @@
         android:horizontalSpacing="15dp"
         android:numColumns="auto_fit"
         android:verticalSpacing="15dp" />
-
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/capture_btn"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_marginBottom="15dp"
+        android:layout_marginRight="15dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        android:src="@drawable/ic_camera_alt_black_24dp"
+        />
 </androidx.constraintlayout.widget.ConstraintLayout>
