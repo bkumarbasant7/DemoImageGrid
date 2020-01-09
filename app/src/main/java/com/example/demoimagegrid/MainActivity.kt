@@ -8,23 +8,38 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.icu.text.SimpleDateFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Debug
+import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.image_item.*
 import kotlinx.android.synthetic.main.image_item.view.*
+import java.io.File
+import java.io.IOException
+import java.lang.Exception
 import java.util.*
+import java.util.logging.Logger
 
 
 class MainActivity : AppCompatActivity() {
+    private lateinit var currentPhotoPath: String
+    val TAG= "MainActivity"
+    private var REQUEST_TAKE_PHOTO: Int =1
 
     var adapter: FoodAdapter? = null
     var foodsList = ArrayList<Food>()
@@ -33,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     var IMAGE_CAPTURE_CODE: Int = 1001
     var image_uri: Uri? = null
 
+    @RequiresApi(Build.VERSION_CODES.N)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -60,21 +76,51 @@ class MainActivity : AppCompatActivity() {
         }
         //*****************************************************************
         // load foods
-
         adapter = FoodAdapter(this, foodsList)
         gvImages.adapter = adapter
     }
 
+    @RequiresApi(Build.VERSION_CODES.N)
     private fun openCamera() {
-        val values = ContentValues()
-        values.put(MediaStore.Images.Media.TITLE, "New Picture")
-        values.put(MediaStore.Images.Media.DESCRIPTION, "From the Camera")
-        image_uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        //camera intent
-        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, image_uri)
-        startActivityForResult(cameraIntent, IMAGE_CAPTURE_CODE)
+        Intent(MediaStore.ACTION_IMAGE_CAPTURE).also { takePictureIntent ->
+            // Ensure that there's a camera activity to handle the intent
+            takePictureIntent.resolveActivity(packageManager)?.also {
+                // Create the File where the photo should go
+                val photoFile: File? = try {
+                    createImageFile()
+                } catch (ex: IOException) {
+                    // Error occurred while creating the File
+                    null
+                }
+                // Continue only if the File was successfully created
+                photoFile?.also {
+                    val photoURI: Uri = FileProvider.getUriForFile(
+                        this,
+                        "com.example.android.fileprovider",
+                        it
+                    )
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+                    startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO)
+                }
+            }
+        }
     }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun createImageFile(): File? {
+        val timeStamp: String? = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val storageDir: File? = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile(
+            "JPEG_${timeStamp}_", /* prefix */
+            ".jpg", /* suffix */
+            storageDir /* directory */
+        ).apply {
+            // Save a file: path for use with ACTION_VIEW intents
+             currentPhotoPath = absolutePath
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -96,17 +142,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("MissingSuperCall")
+    private fun setPic() {
+        // Get the dimensions of the View
+        val targetW: Int = imgFood.width
+        val targetH: Int = imgFood.height
+
+        val bmOptions = BitmapFactory.Options().apply {
+            // Get the dimensions of the bitmap
+            inJustDecodeBounds = true
+
+            val photoW: Int = outWidth
+            val photoH: Int = outHeight
+
+            // Determine how much to scale down the image
+            val scaleFactor: Int = Math.min(photoW / targetW, photoH / targetH)
+
+            // Decode the image file into a Bitmap sized to fill the View
+            inJustDecodeBounds = false
+            inSampleSize = scaleFactor
+            inPurgeable = true
+        }
+        BitmapFactory.decodeFile(currentPhotoPath, bmOptions)?.also { bitmap ->
+            imgFood.setImageBitmap(bitmap)
+        }
+    }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
         //called when image was captured from camera intent
         if (resultCode == Activity.RESULT_OK) {
             //set image captured to image view
-            if(data!= null){
-                val photoUri: Uri =data.getData() as Uri
-                foodsList.add(Food("a",photoUri))
-                adapter = FoodAdapter(this, foodsList)
-                gvImages.adapter = adapter
+            var fileUri:Uri= data!!.data!!
+            try{
+                Log.d(TAG,currentPhotoPath)
+
+                var imageFile= File(currentPhotoPath)
+
+                Log.d(TAG,imageFile.length().toString()+"::Length of File")
+                if(imageFile.exists()) {
+
+                    var bitmap = BitmapFactory.decodeFile(imageFile.path)
+                    Bitmap.createScaledBitmap(bitmap, 120, 120, false)
+
+                    foodsList.add(Food(currentPhotoPath, fileUri))
+                    //todo add to data list
+                    adapter!!.notifyDataSetChanged()
+                }else{
+                    Toast.makeText(this,"No such file",Toast.LENGTH_LONG).show()
+                }
+
+            }catch (exx:Exception){
+                exx.printStackTrace()
             }
+
+
             //imgFood.setImageURI(image_uri)
 
         }
@@ -120,7 +208,6 @@ class MainActivity : AppCompatActivity() {
             this.context = context
             this.foodsList = foodsList
         }
-
         override fun getCount(): Int {
             return foodsList.size
         }
@@ -140,7 +227,6 @@ class MainActivity : AppCompatActivity() {
             var foodView = inflator.inflate(R.layout.image_item, null)
             foodView.imgFood.setImageURI(food.image)
             foodView.tvName.text = food.name!!
-
             return foodView
         }
     }
