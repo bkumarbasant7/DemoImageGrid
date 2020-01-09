@@ -33,13 +33,20 @@ import java.io.File
 import java.io.IOException
 import java.lang.Exception
 import java.util.*
+import java.util.logging.Handler
 import java.util.logging.Logger
 
 
 class MainActivity : AppCompatActivity() {
     private lateinit var currentPhotoPath: String
-    val TAG= "MainActivity"
-    private var REQUEST_TAKE_PHOTO: Int =1
+
+
+    private lateinit var mHandler: Handler
+    private lateinit var mThread: Thread
+
+
+    val TAG = "MainActivity"
+    private var REQUEST_TAKE_PHOTO: Int = 1
 
     var adapter: FoodAdapter? = null
     var foodsList = ArrayList<Food>()
@@ -54,22 +61,24 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         //*****************capture button logic****************************
         capture_btn.setOnClickListener {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (checkSelfPermission(Manifest.permission.CAMERA)
                     == PackageManager.PERMISSION_DENIED ||
                     checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_DENIED){
+                    == PackageManager.PERMISSION_DENIED
+                ) {
                     //permission was not enabled
-                    val permission = arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    val permission = arrayOf(
+                        Manifest.permission.CAMERA,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    )
                     //show popup to request permission
                     requestPermissions(permission, PERMISSION_CODE)
-                }
-                else{
+                } else {
                     //permission already granted
                     openCamera()
                 }
-            }
-            else{
+            } else {
                 //system os is < marshmallow
                 openCamera()
             }
@@ -116,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             storageDir /* directory */
         ).apply {
             // Save a file: path for use with ACTION_VIEW intents
-             currentPhotoPath = absolutePath
+            currentPhotoPath = absolutePath
         }
     }
 
@@ -142,6 +151,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun galleryAddPic() {
+        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).also { mediaScanIntent ->
+            val f = File(currentPhotoPath)
+            mediaScanIntent.data = Uri.fromFile(f)
+            sendBroadcast(mediaScanIntent)
+        }
+    }
+
     private fun setPic() {
         // Get the dimensions of the View
         val targetW: Int = imgFood.width
@@ -150,7 +167,6 @@ class MainActivity : AppCompatActivity() {
         val bmOptions = BitmapFactory.Options().apply {
             // Get the dimensions of the bitmap
             inJustDecodeBounds = true
-
             val photoW: Int = outWidth
             val photoH: Int = outHeight
 
@@ -160,43 +176,44 @@ class MainActivity : AppCompatActivity() {
             // Decode the image file into a Bitmap sized to fill the View
             inJustDecodeBounds = false
             inSampleSize = scaleFactor
-            inPurgeable = true
         }
         BitmapFactory.decodeFile(currentPhotoPath, bmOptions)?.also { bitmap ->
             imgFood.setImageBitmap(bitmap)
         }
     }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         //called when image was captured from camera intent
         if (resultCode == Activity.RESULT_OK) {
             //set image captured to image view
-            var fileUri:Uri= data!!.data!!
-            try{
-                Log.d(TAG,currentPhotoPath)
+            var fileUri: Uri = data!!.data!!
+            mThread=Thread(Runnable {
+                try {
+                    var imageFile = File(currentPhotoPath)
+                    if (imageFile.exists()) {
 
-                var imageFile= File(currentPhotoPath)
+                        var bitmap = BitmapFactory.decodeFile(imageFile.path)
+                        Bitmap.createScaledBitmap(bitmap, 60, 60, false)
+                       // setPic()
 
-                Log.d(TAG,imageFile.length().toString()+"::Length of File")
-                if(imageFile.exists()) {
+                        foodsList.add(Food("New Picture", fileUri))
+                        //todo add to data list
 
-                    var bitmap = BitmapFactory.decodeFile(imageFile.path)
-                    Bitmap.createScaledBitmap(bitmap, 120, 120, false)
+                        runOnUiThread( Runnable {
+                            adapter!!.notifyDataSetChanged()
+                        })
+                    } else {
+                        Toast.makeText(this, "No such file", Toast.LENGTH_LONG).show()
+                    }
 
-                    foodsList.add(Food(currentPhotoPath, fileUri))
-                    //todo add to data list
-                    adapter!!.notifyDataSetChanged()
-                }else{
-                    Toast.makeText(this,"No such file",Toast.LENGTH_LONG).show()
+                } catch (exx: Exception) {
+                    exx.printStackTrace()
                 }
 
-            }catch (exx:Exception){
-                exx.printStackTrace()
-            }
+            })
 
-
-            //imgFood.setImageURI(image_uri)
-
+            mThread.start()
         }
     }
 
@@ -219,6 +236,7 @@ class MainActivity : AppCompatActivity() {
         override fun getItemId(position: Int): Long {
             return position.toLong()
         }
+
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val food = this.foodsList[position]
 
